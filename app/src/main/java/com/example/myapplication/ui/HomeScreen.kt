@@ -5,44 +5,98 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import androidx.navigation.NavController
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(navController: NavController) {
     var products by remember { mutableStateOf(listOf<Product>()) }
-   // val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         products = fetchProducts()
     }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(16.dp)
-    ) {
-        if (products.isEmpty()) {
-            Text("No hay productos disponibles")
-        } else {
-            LazyColumn {
-                items(products) { product ->
-                    ProductItem(product)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            if (products.isEmpty()) {
+                Text("No hay productos disponibles")
+            } else {
+                LazyColumn {
+                    items(products) { product ->
+                        ProductItem(product) { deletedProductId ->
+                            products = products.filter { it.id != deletedProductId }
+                        }
+                    }
                 }
             }
+        }
+        
+        // Botón flotante para añadir producto
+        FloatingActionButton(
+            onClick = { navController.navigate("add_product") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Añadir Producto"
+            )
         }
     }
 }
 
 @Composable
-fun ProductItem(product: Product) {
+fun ProductItem(
+    product: Product,
+    onProductDeleted: (Int) -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var showDialog by remember { mutableStateOf(false) }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Confirmar eliminación") },
+            text = { Text("¿Estás seguro de que deseas eliminar este producto?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val success = deleteProduct(product.id)
+                            if (success) {
+                                onProductDeleted(product.id)
+                            }
+                        }
+                        showDialog = false
+                    }
+                ) {
+                    Text("Eliminar")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -62,6 +116,16 @@ fun ProductItem(product: Product) {
             Text(text = product.descripcion, style = MaterialTheme.typography.bodyMedium)
             Text(text = "Precio: ${product.precio}", style = MaterialTheme.typography.bodyMedium)
             Text(text = "Stock: ${product.stock}", style = MaterialTheme.typography.bodyMedium)
+            
+            Button(
+                onClick = { showDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Eliminar Producto")
+            }
         }
     }
 }
@@ -98,6 +162,30 @@ fun parseProducts(jsonData: String?): List<Product> {
         }
     }
     return products
+}
+
+suspend fun deleteProduct(productId: Int): Boolean {
+    val client = OkHttpClient()
+    val request = Request.Builder()
+        .url("http://10.0.2.2:3000/api/products/$productId")
+        .delete()
+        .build()
+
+    return withContext(Dispatchers.IO) {
+        try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                Log.d("HomeScreen", "Producto eliminado con éxito")
+                true
+            } else {
+                Log.e("HomeScreen", "Error al eliminar el producto: ${response.code}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("HomeScreen", "Error al eliminar el producto", e)
+            false
+        }
+    }
 }
 
 data class Product(
