@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,24 +23,78 @@ import org.json.JSONArray
 import androidx.navigation.NavController
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.MainScope
+import org.json.JSONObject
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
     var products by remember { mutableStateOf(listOf<Product>()) }
-
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+    
     LaunchedEffect(Unit) {
         products = fetchProducts()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
+            // Barra de búsqueda
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { newQuery ->
+                    searchQuery = newQuery
+                    // Cuando el input está vacío, obtener todos los productos
+                    if (newQuery.isEmpty()) {
+                        isSearching = false
+                        // Lanzar una coroutine para obtener todos los productos
+                        MainScope().launch {
+                            products = fetchProducts()
+                        }
+                    } else {
+                        isSearching = true
+                        // Lanzar una coroutine para buscar productos
+                        MainScope().launch {
+                            products = searchProducts(newQuery)
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                placeholder = { Text("Buscar producto por nombre...") },
+                leadingIcon = { 
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Buscar"
+                    )
+                },
+                singleLine = true
+            )
+
             if (products.isEmpty()) {
-                Text("No hay productos disponibles")
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isSearching) 
+                            "No se encontraron resultados para: $searchQuery" 
+                        else 
+                            "No hay productos disponibles",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             } else {
-                LazyColumn {
+                LazyColumn(
+                    modifier = Modifier.weight(1f)
+                ) {
                     items(products) { product ->
                         ProductItem(
                             product = product,
@@ -173,21 +228,35 @@ suspend fun fetchProducts(): List<Product> {
 fun parseProducts(jsonData: String?): List<Product> {
     val products = mutableListOf<Product>()
     jsonData?.let {
-        val jsonArray = JSONArray(it)
-        for (i in 0 until jsonArray.length()) {
-            val jsonObject = jsonArray.getJSONObject(i)
-            val product = Product(
-                id = jsonObject.getInt("id"),
-                nombre = jsonObject.getString("nombre"),
-                descripcion = jsonObject.getString("descripcion"),
-                precio = jsonObject.getString("precio"),
-                stock = jsonObject.getInt("stock"),
-                imagenUrl = jsonObject.getString("imagenUrl")
-            )
-            products.add(product)
+        try {
+            // Intentar parsear como array primero
+            val jsonArray = JSONArray(it)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                products.add(parseProductFromJson(jsonObject))
+            }
+        } catch (e: Exception) {
+            try {
+                // Si falla, intentar parsear como objeto único
+                val jsonObject = JSONObject(it)
+                products.add(parseProductFromJson(jsonObject))
+            } catch (e: Exception) {
+                Log.e("HomeScreen", "Error parseando productos", e)
+            }
         }
     }
     return products
+}
+
+private fun parseProductFromJson(jsonObject: JSONObject): Product {
+    return Product(
+        id = jsonObject.getInt("id"),
+        nombre = jsonObject.getString("nombre"),
+        descripcion = jsonObject.getString("descripcion"),
+        precio = jsonObject.getString("precio"),
+        stock = jsonObject.getInt("stock"),
+        imagenUrl = jsonObject.getString("imagenUrl")
+    )
 }
 
 suspend fun deleteProduct(productId: Int): Boolean {
@@ -210,6 +279,30 @@ suspend fun deleteProduct(productId: Int): Boolean {
         } catch (e: Exception) {
             Log.e("HomeScreen", "Error al eliminar el producto", e)
             false
+        }
+    }
+}
+
+suspend fun searchProducts(nombre: String): List<Product> {
+    return withContext(Dispatchers.IO) {
+        try {
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("http://10.0.2.2:3000/api/products/$nombre")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val jsonData = response.body?.string()
+                Log.d("HomeScreen", "Respuesta búsqueda: $jsonData")
+                parseProducts(jsonData)
+            } else {
+                Log.e("HomeScreen", "Error en búsqueda: ${response.code}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e("HomeScreen", "Error al buscar productos", e)
+            emptyList()
         }
     }
 }

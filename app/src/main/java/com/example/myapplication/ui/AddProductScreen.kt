@@ -25,6 +25,7 @@ import android.util.Log
 import androidx.compose.ui.Alignment
 import coil.compose.AsyncImage
 import java.util.UUID
+import androidx.core.content.FileProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +48,11 @@ fun AddProductScreen(navController: NavController) {
     // Crear un archivo temporal para la foto de la cámara
     val tempImageFile = remember { context.createImageFile() }
     val tempImageUri = remember {
-        Uri.fromFile(tempImageFile)
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            tempImageFile
+        )
     }
 
     // Launcher para tomar foto con la cámara
@@ -183,8 +188,11 @@ fun AddProductScreen(navController: NavController) {
 
 // Función para crear un archivo temporal para la imagen de la cámara
 fun Context.createImageFile(): File {
-    val fileName = "TEMP_IMAGE_${UUID.randomUUID()}"
-    return File(cacheDir, fileName)
+    val fileName = "TEMP_IMAGE_${UUID.randomUUID()}.jpg"
+    return File(cacheDir, fileName).apply {
+        createNewFile()
+        deleteOnExit()
+    }
 }
 
 suspend fun addProduct(
