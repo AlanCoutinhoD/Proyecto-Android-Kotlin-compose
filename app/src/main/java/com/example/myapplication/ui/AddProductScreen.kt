@@ -22,6 +22,9 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 import java.io.FileOutputStream
 import android.util.Log
+import androidx.compose.ui.Alignment
+import coil.compose.AsyncImage
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +33,7 @@ fun AddProductScreen(navController: NavController) {
     var descripcion by remember { mutableStateOf("") }
     var precio by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showImagePickerDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -40,13 +44,48 @@ fun AddProductScreen(navController: NavController) {
         selectedImageUri = uri
     }
 
+    // Crear un archivo temporal para la foto de la cámara
+    val tempImageFile = remember { context.createImageFile() }
+    val tempImageUri = remember {
+        Uri.fromFile(tempImageFile)
+    }
+
     // Launcher para tomar foto con la cámara
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            // La foto se guardó en selectedImageUri
+            selectedImageUri = tempImageUri
         }
+    }
+
+    // Diálogo para seleccionar fuente de imagen
+    if (showImagePickerDialog) {
+        AlertDialog(
+            onDismissRequest = { showImagePickerDialog = false },
+            title = { Text("Seleccionar imagen") },
+            text = { Text("¿De dónde quieres obtener la imagen?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        galleryLauncher.launch("image/*")
+                        showImagePickerDialog = false
+                    }
+                ) {
+                    Text("Galería")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        cameraLauncher.launch(tempImageUri)
+                        showImagePickerDialog = false
+                    }
+                ) {
+                    Text("Cámara")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -67,6 +106,18 @@ fun AddProductScreen(navController: NavController) {
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            // Vista previa de la imagen seleccionada
+            if (selectedImageUri != null) {
+                AsyncImage(
+                    model = selectedImageUri,
+                    contentDescription = "Vista previa de la imagen",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(bottom = 16.dp)
+                )
+            }
+
             OutlinedTextField(
                 value = nombre,
                 onValueChange = { nombre = it },
@@ -94,30 +145,13 @@ fun AddProductScreen(navController: NavController) {
                     .padding(vertical = 8.dp)
             )
 
-            Row(
+            Button(
+                onClick = { showImagePickerDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
-                Button(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp)
-                ) {
-                    Text("Seleccionar Imagen")
-                }
-
-                Button(
-                    onClick = {
-                        // Implementar lógica para tomar foto
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 8.dp)
-                ) {
-                    Text("Tomar Foto")
-                }
+                Text(if (selectedImageUri == null) "Seleccionar Imagen" else "Cambiar Imagen")
             }
 
             Button(
@@ -145,6 +179,12 @@ fun AddProductScreen(navController: NavController) {
             }
         }
     }
+}
+
+// Función para crear un archivo temporal para la imagen de la cámara
+fun Context.createImageFile(): File {
+    val fileName = "TEMP_IMAGE_${UUID.randomUUID()}"
+    return File(cacheDir, fileName)
 }
 
 suspend fun addProduct(

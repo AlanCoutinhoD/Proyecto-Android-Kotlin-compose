@@ -1,4 +1,5 @@
 package com.example.myapplication.ui
+
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import androidx.navigation.NavController
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -38,9 +41,13 @@ fun HomeScreen(navController: NavController) {
             } else {
                 LazyColumn {
                     items(products) { product ->
-                        ProductItem(product) { deletedProductId ->
-                            products = products.filter { it.id != deletedProductId }
-                        }
+                        ProductItem(
+                            product = product,
+                            navController = navController,
+                            onProductDeleted = { deletedProductId ->
+                                products = products.filter { it.id != deletedProductId }
+                            }
+                        )
                     }
                 }
             }
@@ -64,6 +71,7 @@ fun HomeScreen(navController: NavController) {
 @Composable
 fun ProductItem(
     product: Product,
+    navController: NavController,
     onProductDeleted: (Int) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -117,14 +125,32 @@ fun ProductItem(
             Text(text = "Precio: ${product.precio}", style = MaterialTheme.typography.bodyMedium)
             Text(text = "Stock: ${product.stock}", style = MaterialTheme.typography.bodyMedium)
             
-            Button(
-                onClick = { showDialog = true },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Eliminar Producto")
+                Button(
+                    onClick = { showDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Eliminar")
+                }
+                
+                Button(
+                    onClick = { 
+                        navController.navigate("edit_product/${product.id}")
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
+                ) {
+                    Text("Editar")
+                }
             }
         }
     }
